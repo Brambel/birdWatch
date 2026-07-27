@@ -1,0 +1,42 @@
+# =========================
+# ESP-IDF Build Artifacts
+# =========================
+build/
+sdkconfig.old
+managed_components/
+dependencies.lock
+
+# =========================
+# C/C++ Compiled Binaries
+# =========================
+*.o
+*.obj
+*.elf
+*.map
+*.bin
+*.hex
+*.a
+*.lib
+
+# =========================
+# Eclipse IDE Files
+# =========================
+.metadata/
+.settings/
+.cproject
+.project
+esp_idf_components/
+
+# =========================
+# OS Generated Files
+# =========================
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS (just in case)
+.DS_Store
+.AppleDouble
+.LSOverride
