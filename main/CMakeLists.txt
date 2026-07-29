@@ -21,4 +21,5 @@ idf_component_register(
     	esp_timer
     	lwip
     	nvs_flash
+    	mdns
 )

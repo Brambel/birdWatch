@@ -15,12 +15,35 @@
 #include "freertos/projdefs.h"
 #include "nvs_flash.h"
 #include "freertos/event_groups.h"
+#include "mdns.h"
 
 #define WIFI_CONNECTED_BIT BIT0  //bit flag for blocking group
 
 #undef TAG
 static const char *TAG = "WIFI";
 static EventGroupHandle_t s_wifi_event_group;
+
+static void start_mdns_service(void)
+{
+    ESP_LOGI(TAG, "Initializing mDNS...");
+
+    // initialize mDNS
+    ESP_ERROR_CHECK(mdns_init());
+	
+	//set host and instance name
+    ESP_ERROR_CHECK(mdns_hostname_set(HOSTNAME));
+    ESP_ERROR_CHECK(mdns_instance_name_set(HOSTNAME " CLI"));
+
+	ESP_ERROR_CHECK(mdns_service_add(
+        HOSTNAME " CLI",   
+        "_sensor",        
+        "_tcp",            // Transport protocol
+        TCP_SERVER_PORT,          
+        NULL,             
+        0                  
+    ));
+    ESP_LOGI(TAG, "mDNS initialized. Hostname: " HOSTNAME);
+}
 
 static void wifi_event_handler(
         void *arg,
@@ -49,9 +72,10 @@ static void wifi_event_handler(
         ip_event_got_ip_t *event =
             (ip_event_got_ip_t *)event_data;
 
-        ESP_LOGI(TAG,
-                 "IP: " IPSTR,
-                 IP2STR(&event->ip_info.ip));
+        ESP_LOGI(TAG, "IP: " IPSTR, IP2STR(&event->ip_info.ip));
+		
+		start_mdns_service();
+		
 	 	xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     }
 }
