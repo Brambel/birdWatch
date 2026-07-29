@@ -43,7 +43,8 @@ static void send_uart_cmd(const char *cmd) {
 
 void C4001_SetMode(c4001_mode_t mode) {
     s_current_mode = mode;
-    ESP_LOGI(TAG, "Switching C4001 to Mode %d...", (int)mode);
+    ESP_LOGI(TAG, "Configuring C4001 to Mode %d (%s)...", (int)mode,
+             mode == C4001_MODE_PRESENCE ? "Presence" : "Speed & Distance");
     
     send_uart_cmd("sensorStop\r\n");
     if (mode == C4001_MODE_PRESENCE) {
@@ -87,33 +88,37 @@ void C4001_GetLatestData(bool *detected, uint32_t *total_count,
     }
 }
 
-// Parses $DFDMD sentences: "$DFDMD,motion,presence,distance,speed,energy, , *"
+// Parses $DFHPD or $DFDMD sentences
 static void parse_c4001_line(const char *line) {
     bool current_state = false;
     bool valid_packet = false;
+    float temp_dist = 0.0f;
+    float temp_speed = 0.0f;
+    int temp_energy = 0;
 
-    //Parse Mode 0 ($DFHPD) Presence Packets
+    // Parse Mode 0 ($DFHPD) Presence Packets
     if (strncmp(line, "$DFHPD,", 7) == 0) {
         int presence = 0;
         if (sscanf(line, "$DFHPD,%d", &presence) == 1) {
             current_state = (presence > 0);
             valid_packet = true;
-            s_distance_m = 0.0f;
-            s_speed_ms = 0.0f;
-            s_energy = 0;
         }
     } 
-    //Parse Mode 1 ($DFDMD) Distance & Speed Packets
+    // Parse Mode 1 ($DFDMD) Distance & Speed Packets
     else if (strncmp(line, "$DFDMD,", 7) == 0) {
         int motion = 0, presence = 0;
-        if (sscanf(line, "$DFDMD,%d,%d,%f,%f,%d", &motion, &presence, &s_distance_m, &s_speed_ms, &s_energy) >= 4) {
+        if (sscanf(line, "$DFDMD,%d,%d,%f,%f,%d", &motion, &presence, &temp_dist, &temp_speed, &temp_energy) >= 4) {
             current_state = (motion > 0 || presence > 0);
             valid_packet = true;
         }
     }
 
-    // Process State Update
+    // Process State Update safely under mutex
     if (valid_packet && s_status_mutex && xSemaphoreTake(s_status_mutex, pdMS_TO_TICKS(50))) {
+        s_distance_m = temp_dist;
+        s_speed_ms = temp_speed;
+        s_energy = temp_energy;
+
         if (current_state && !s_is_detected) {
             s_detection_count++;
             get_uptime_timestamp(s_last_timestamp, sizeof(s_last_timestamp));
@@ -136,12 +141,8 @@ static void c4001_uart_event_task(void *pvParameters) {
     uart_event_t event;
     uint8_t dtmp[128];
 
-    // Configure sensor for mode 1 on boot
-    ESP_LOGI(TAG, "Configuring C4001 into Speed & Distance Mode...");
-    send_uart_cmd("sensorStop\r\n");
-    send_uart_cmd("setRunApp 1\r\n");
-    send_uart_cmd("saveConfig\r\n");
-    send_uart_cmd("sensorStart\r\n");
+    // Synchronize sensor hardware to initial mode on boot
+    C4001_SetMode(s_current_mode);
 
     char rx_line[128];
     uint16_t rx_idx = 0;
