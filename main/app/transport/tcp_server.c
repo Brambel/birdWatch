@@ -6,19 +6,18 @@
  */
 
 #include "tcp_server.h"
+#include "app/configuration.h"
 
 #include <string.h>
 #include "esp_log.h"
-
 #include "lwip/sockets.h"
 #include "lwip/netdb.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-
+#undef TAG
 #define TAG "TCP"
 
-#define SERVER_PORT 2323
 #define RX_BUFFER_SIZE 256
 
 static int clientSocket = -1;
@@ -74,7 +73,7 @@ static void TCP_Server_Task(void *arg)
     setsockopt(listenSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(SERVER_PORT);
+    serverAddr.sin_port = htons(TCP_SERVER_PORT);
     serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     if (bind(listenSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0) {
@@ -93,7 +92,7 @@ static void TCP_Server_Task(void *arg)
 
     while (1)
     {
-        ESP_LOGI(TAG, "Listening on port %d...", SERVER_PORT);
+        ESP_LOGI(TAG, "Listening on port %d...", TCP_SERVER_PORT);
 
         clientSocket = accept(listenSocket, NULL, NULL);
         if (clientSocket < 0) {
