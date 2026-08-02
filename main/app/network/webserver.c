@@ -80,7 +80,7 @@ static esp_err_t IndexHandler(httpd_req_t *req)
     return ESP_OK;
 }
 
-// 3. Favicon Handler
+//Favicon Handler
 static const char favicon_svg[] = 
     "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">"
     "<text y=\".9em\" font-size=\"90\">🐦</text>"
@@ -101,7 +101,7 @@ void register_favicon(httpd_handle_t server) {
     httpd_register_uri_handler(server, &favicon_uri);
 }
 
-// 4. WebServer Init
+// WebServer Init
 void WebServer_Init(void)
 {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();

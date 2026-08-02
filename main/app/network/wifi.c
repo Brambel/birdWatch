@@ -15,7 +15,9 @@
 #include "freertos/projdefs.h"
 #include "nvs_flash.h"
 #include "freertos/event_groups.h"
+#include "freertos/task.h"
 #include "mdns.h"
+#include "esp_sntp.h"
 
 #define WIFI_CONNECTED_BIT BIT0  //bit flag for blocking group
 
@@ -43,6 +45,28 @@ static void start_mdns_service(void)
         0                  
     ));
     ESP_LOGI(TAG, "mDNS initialized. Hostname: " HOSTNAME);
+}
+
+static void initialize_sntp(void)
+{
+    ESP_LOGI(TAG, "Initializing SNTP...");
+    sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    sntp_setservername(0, "pool.ntp.org");
+    sntp_init();
+
+    // Wait for time to be set
+    int retry = 0;
+    const int retry_count = 15; // 30 seconds max wait
+    while (sntp_get_sync_status() == SNTP_SYNC_STATUS_RESET && ++retry < retry_count) {
+        ESP_LOGI(TAG, "Waiting for system time to be set... (%d/%d)", retry, retry_count);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+    }
+
+    if (retry == retry_count) {
+        ESP_LOGW(TAG, "Could not synchronize time with NTP server!");
+    } else {
+        ESP_LOGI(TAG, "Time synchronized successfully!");
+    }
 }
 
 static void wifi_event_handler(
@@ -89,8 +113,10 @@ void WiFi_Init(void)
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(esp_netif_init());
 
-    ESP_ERROR_CHECK(
-        esp_event_loop_create_default());
+	esp_err_t err = esp_event_loop_create_default();
+	if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+	    ESP_ERROR_CHECK(err);
+	}
 
     esp_netif_create_default_wifi_sta();
 
@@ -143,7 +169,9 @@ void WiFi_Init(void)
     );
 		
     ESP_LOGI(TAG,"WiFi Started");
+
+    // Initialize SNTP now that we have a stable internet connection
+    initialize_sntp();
+
 	ESP_LOGD(TAG,"finished init");
 }
-
-

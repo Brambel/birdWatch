@@ -3,6 +3,8 @@ idf_component_register(
 		main.c
 		app/appCli.c
 		app/hardware/c4001.c
+		app/hardware/device_info.c
+		app/mqtt/mqtt_publisher.c
 		app/network/webserver.c
 		app/network/wifi.c
 		app/transport/uart_bridge.c
@@ -22,4 +24,5 @@ idf_component_register(
     	lwip
     	nvs_flash
     	mdns
+    	espressif__mqtt
 )
