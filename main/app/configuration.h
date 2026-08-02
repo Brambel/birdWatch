@@ -31,4 +31,14 @@
     { "APP",       ESP_LOG_DEBUG   }       \
 }
 
+/**
+* MQTT CONFIGURATION
+*/
+
+#define MQTT_ADDR "mqtt.home"
+#define MQTT_PORT 1883
+
+#define API_VERSION "v1"
+#define SENSOR_TYPE "birdwatch"
+
 #endif /* MAIN_CONFIGURATION_H_ */

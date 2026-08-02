@@ -6,17 +6,19 @@
  */
 
 #include "c4001.h"
+#include "app/mqtt/mqtt_publisher.h"
+#include "esp_event.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "driver/gpio.h"
 #include "driver/uart.h"
-#include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include <string.h>
 #include <stdio.h>
 #include <inttypes.h>
+#include <sys/time.h>
 
 static const char *TAG = "C4001";
 
@@ -56,12 +58,12 @@ void C4001_SetMode(c4001_mode_t mode) {
     send_uart_cmd("sensorStart\r\n");
 }
 
-static void get_uptime_timestamp(char *buf, size_t max_len) {
-    int64_t total_sec = esp_timer_get_time() / 1000000;
-    int hours = (int)(total_sec / 3600);
-    int mins = (int)((total_sec % 3600) / 60);
-    int secs = (int)(total_sec % 60);
-    snprintf(buf, max_len, "%02d:%02d:%02d", hours, mins, secs);
+static void get_epoch_timestamp(char *buf, size_t max_len) {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    
+    // Store raw epoch seconds as a number string for Java to parse via Instant.ofEpochSecond()
+    snprintf(buf, max_len, "%lld", (long long)tv.tv_sec);
 }
 
 void C4001_GetStatus(bool *detected, uint32_t *total_count) {
@@ -113,28 +115,38 @@ static void parse_c4001_line(const char *line) {
         }
     }
 
-    // Process State Update safely under mutex
-    if (valid_packet && s_status_mutex && xSemaphoreTake(s_status_mutex, pdMS_TO_TICKS(50))) {
-        s_distance_m = temp_dist;
-        s_speed_ms = temp_speed;
-        s_energy = temp_energy;
+	// Process State Update safely under mutex
+	    if (valid_packet && s_status_mutex && xSemaphoreTake(s_status_mutex, pdMS_TO_TICKS(50))) {
+	        s_distance_m = temp_dist;
+	        s_speed_ms = temp_speed;
+	        s_energy = temp_energy;
 
-        if (current_state && !s_is_detected) {
-            s_detection_count++;
-            get_uptime_timestamp(s_last_timestamp, sizeof(s_last_timestamp));
-            ESP_LOGI(TAG, "[%s] >>> MOTION DETECTED (Mode %d)! Total: %" PRIu32 " <<<", 
-                     s_last_timestamp, (int)s_current_mode, s_detection_count);
-        } else if (!current_state && s_is_detected) {
-            ESP_LOGI(TAG, "Target cleared.");
-        }
+	        if (current_state && !s_is_detected) {
+	            s_detection_count++;
+	            get_epoch_timestamp(s_last_timestamp, sizeof(s_last_timestamp));
+	            ESP_LOGI(TAG, "[%s] >>> MOTION DETECTED (Mode %d)! Total: %" PRIu32 " <<<", 
+	                     s_last_timestamp, (int)s_current_mode, s_detection_count);
 
-        if (current_state) {
-            snprintf(s_last_raw_packet, sizeof(s_last_raw_packet), "%s", line);
-        }
+	            // Pack snapshot of event data
+	            detection_event_t evt = {
+	                .count = s_detection_count,
+	            };
+	            strncpy(evt.timestamp, s_last_timestamp, sizeof(evt.timestamp) - 1);
 
-        s_is_detected = current_state;
-        xSemaphoreGive(s_status_mutex);
-    }
+	            // Post to the ESP event loop safely while state change is verified
+	            esp_event_post(BIRD_WATCH_EVENTS, DETECTION_EVENT, &evt, sizeof(evt), 0);
+	        } else if (!current_state && s_is_detected) {
+	            ESP_LOGI(TAG, "Target cleared.");
+	        }
+
+	        if (current_state) {
+	            snprintf(s_last_raw_packet, sizeof(s_last_raw_packet), "%s", line);
+	        }
+
+	        s_is_detected = current_state;
+	        xSemaphoreGive(s_status_mutex);
+	    }
+
 }
 
 static void c4001_uart_event_task(void *pvParameters) {

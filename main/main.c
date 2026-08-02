@@ -7,10 +7,13 @@
 #include "app/configuration.h"
 #include "app/appCli.h"
 #include "app/hardware/c4001.h"
+#include "app/hardware/device_info.h"
+#include "app/mqtt/mqtt_publisher.h"
 #include "app/transport/tcp_server.h"
 #include "app/network/webserver.h"
 #include "app/network/wifi.h"
 
+#include "esp_event.h"
 #include "esp_log.h"
 #include "freertos/idf_additions.h"
 
@@ -38,15 +41,23 @@ void App_Log_Init(void)
 
 void app_main(void)
 {
+	//init hardware
+	ESP_ERROR_CHECK(esp_event_loop_create_default());
+    Device_Info_Init();
 	
+	//init app
 	App_Log_Init();
 	
-	
+	//init services
 	WiFi_Init();
 	WebServer_Init();
 	TCP_Server_Init();
 	C4001_Init();
 	Cli_Init();
+
+	MQTT_Publisher_Init();
+	
+	
 	ESP_LOGD(TAG,"finished init");
 	
 	while(1)
